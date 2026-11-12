@@ -7,14 +7,22 @@ if ! command -v flutter >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -f android/app/build.gradle.kts && ! -f android/app/build.gradle ]] || [[ ! -f ios/Runner/AppDelegate.swift ]]; then
-  echo 'Criando os projetos nativos Android e iOS com o Flutter instalado...'
-  flutter create --platforms=android,ios --project-name notificacoes_locais_lddm --org br.edu.pucminas .
+platforms='android,web'
+if [[ "$(uname -s)" == 'Darwin' ]]; then
+  platforms='android,ios,web'
+fi
+
+if [[ ! -f android/app/build.gradle.kts && ! -f android/app/build.gradle ]] || \
+   [[ ! -f web/index.html ]] || \
+   { [[ "$(uname -s)" == 'Darwin' ]] && [[ ! -f ios/Runner/AppDelegate.swift ]]; }; then
+  echo "Gerando arquivos padronizados do Flutter: $platforms"
+  flutter create --platforms="$platforms" --project-name notificacoes_locais_lddm --org br.edu.pucminas .
 fi
 
 python3 scripts/apply_native_overrides.py
 flutter pub get
 
 echo ''
-echo 'Pronto. Execute: flutter run'
-echo 'Confira também: flutter analyze && flutter test'
+echo 'Pronto! Web: flutter run -d web-server --web-port 7357'
+echo 'Para Android/iOS, use: flutter devices && flutter run -d ID'
+echo 'Valide: flutter analyze && flutter test'

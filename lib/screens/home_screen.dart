@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.service.onScheduleChanged = _refresh;
     if (_isReady) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
@@ -37,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.service.onScheduleChanged = null;
     super.dispose();
   }
 
@@ -78,10 +80,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _withPermission(Future<String> Function() action) async {
+    widget.service.prepareUserGesture();
     await _run(() async {
       if (!await widget.service.ensurePermission()) {
-        return 'Permissão negada. Abra os ajustes de notificações do app '
-            'para permitir alertas e som.';
+        return widget.service.isWeb
+            ? 'Permissão negada. Abra as permissões deste site no navegador; use localhost ou HTTPS.'
+            : 'Permissão negada. Abra os ajustes de notificações do app para permitir alertas e som.';
       }
       return action();
     });
@@ -115,6 +119,24 @@ class _HomeScreenState extends State<HomeScreen>
               children: [
                 const _IntroBanner(),
                 const SizedBox(height: 14),
+                if (widget.service.isWeb) ...[
+                  Card(
+                    color: const Color(0xFFFFF4DE),
+                    child: Padding(
+                      padding: const EdgeInsets.all(15),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Modo Web: notificação real, agendamento limitado',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          SizedBox(height: 6),
+                          Text('O navegador mostra o aviso do sistema e o site toca um apito após seu clique. O teste de 1 minuto e o lembrete diário usam Timer: mantenha esta aba aberta. Fechar o navegador cancela os timers. Use localhost ou HTTPS.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(18),
@@ -141,8 +163,12 @@ class _HomeScreenState extends State<HomeScreen>
                           ],
                         ),
                         const SizedBox(height: 8),
+                        Text('Plataforma: ${widget.service.platformDescription}'),
                         Text('Fuso: ${widget.service.timeZoneName}'),
                         Text('Agendamentos pendentes: ${_pending ?? '...'}'),
+                        if (widget.service.lastDeliveryError != null)
+                          Text(widget.service.lastDeliveryError!,
+                              style: const TextStyle(color: Colors.red)),
                         if (widget.service.timeZoneIsFallback)
                           const Padding(
                             padding: EdgeInsets.only(top: 8),
@@ -157,13 +183,17 @@ class _HomeScreenState extends State<HomeScreen>
                           children: [
                             FilledButton.tonalIcon(
                               onPressed: _isReady && !_busy
-                                  ? () => _run(() async {
-                                        final granted = await widget.service
-                                            .requestPermission();
+                                  ? () {
+                                      widget.service.prepareUserGesture();
+                                      _run(() async {
+                                        final granted = await widget.service.requestPermission();
                                         return granted
-                                            ? 'Permissão concedida. Agora os avisos podem aparecer.'
-                                            : 'Permissão não concedida. Abra os ajustes do aparelho.';
-                                      })
+                                            ? 'Permissão concedida. Pode testar os avisos.'
+                                            : widget.service.isWeb
+                                                ? 'Autorize notificações para este site no navegador.'
+                                                : 'Permissão negada. Abra os ajustes do aparelho.';
+                                      });
+                                    }
                                   : null,
                               icon: const Icon(Icons.verified_user_outlined),
                               label: const Text('Permitir avisos'),
@@ -175,7 +205,9 @@ class _HomeScreenState extends State<HomeScreen>
                                             .openNotificationSettings();
                                         return opened
                                             ? 'Confira se alertas e som estão ligados nos ajustes.'
-                                            : 'Abra manualmente as configurações de notificações do app.';
+                                            : widget.service.isWeb
+                                                ? 'No navegador, clique no cadeado ao lado da URL e habilite as notificações deste site.'
+                                                : 'Abra manualmente as configurações de notificações do app.';
                                       })
                                   : null,
                               icon: const Icon(Icons.settings_outlined),
@@ -211,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen>
                         _DemoAction(
                           number: '01',
                           title: 'Notificar agora',
-                          description: 'Chama show(); o aviso deve aparecer e tocar.',
+                          description: 'show(): aviso real do sistema e som quando permitido.',
                           icon: Icons.notifications_active_outlined,
                           onPressed: !_isReady || _busy
                               ? null
@@ -224,7 +256,9 @@ class _HomeScreenState extends State<HomeScreen>
                         _DemoAction(
                           number: '02',
                           title: 'Agendar para 1 minuto',
-                          description: 'Chama zonedSchedule(); pode testar com o app fechado.',
+                          description: widget.service.isWeb
+                              ? 'Timer por 1 minuto; mantenha esta aba aberta.'
+                              : 'zonedSchedule(); funciona com o aplicativo fechado.',
                           icon: Icons.access_time,
                           onPressed: !_isReady || _busy
                               ? null
@@ -232,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     final result = await widget.service
                                         .scheduleInOneMinute();
                                     return 'Programada para ${_time(result.when)}. '
-                                        '${result.exact ? 'Modo exato solicitado.' : 'Modo inexato: o Android pode atrasar.'}';
+                                        '${widget.service.isWeb ? 'Timer Web ativo: não feche a aba.' : result.exact ? 'Modo exato solicitado.' : 'Alarme inexato: pode atrasar no Android.'}';
                                   }),
                         ),
                         const Divider(height: 28),
@@ -252,7 +286,9 @@ class _HomeScreenState extends State<HomeScreen>
                         _DemoAction(
                           number: '04',
                           title: 'Repetir todo dia às 08:00',
-                          description: 'Recorrência com fuso e DateTimeComponents.time.',
+                          description: widget.service.isWeb
+                              ? 'Timer diário com horário local, somente com a aba aberta.'
+                              : 'Recorrência com fuso e DateTimeComponents.time.',
                           icon: Icons.event_repeat,
                           onPressed: !_isReady || _busy ||
                                   widget.service.timeZoneIsFallback
@@ -261,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     final result = await widget.service
                                         .scheduleDailyAtEight();
                                     return 'Próximo aviso às ${_time(result.when)}; '
-                                        'repete todos os dias. ${result.exact ? 'Exato.' : 'Pode atrasar no Android.'}';
+                                        'repete todos os dias. ${widget.service.isWeb ? 'Somente com a aba Web aberta.' : result.exact ? 'Exato solicitado.' : 'Pode atrasar no Android.'}';
                                   }),
                         ),
                       ],
@@ -317,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'O som depende do volume, do modo silencioso, do Não Perturbe e das configurações do canal (Android). Não é possível forçar áudio contra essas escolhas do sistema.',
+                  'O som nativo depende do volume, silencioso, Não Perturbe e das configurações do sistema. No navegador, o apito da página exige interação anterior e uma aba aberta; o navegador não garante som do próprio banner.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: Color(0xFF5C6773)),
                 ),
@@ -350,7 +386,7 @@ class _IntroBanner extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Quem avisa é o próprio aparelho.',
+            'Avisos locais em cada plataforma.',
             style: TextStyle(
               color: Colors.white,
               fontSize: 23,
@@ -359,7 +395,7 @@ class _IntroBanner extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Flutter • Android • iOS • sem Firebase ou servidor',
+            'Flutter • Android • iOS • Web • sem Firebase',
             style: TextStyle(color: Color(0xFFE1E9F0)),
           ),
         ],

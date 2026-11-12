@@ -1,146 +1,189 @@
-# Workshop Técnico · Notificações Locais
+# Workshop técnico LDDM — Notificações locais (Flutter)
 
-Aplicativo didático em **Flutter (Android e iOS)** que acompanha os slides da disciplina **Laboratório de Desenvolvimento para Dispositivos Móveis (PUC Minas)**.
+Projeto de demonstração para a **PUC Minas**, compatível com **Android, iOS e navegador Web**, com quatro experimentos, solicitação de permissões, som e navegação por `payload`.
 
-**Integrantes**
+**Autores:** Rafael Xavier Oliveira · Leonardo Stuart de Almeida Ramalho · Luca Guimarães Lodi · Gabriel Teotônio de Castro Coelho Costa · Gabriel Benício Fonseca do Nascimento.
 
-- Rafael Xavier Oliveira
-- Leonardo Stuart de Almeida Ramalho
-- Luca Guimarães Lodi
-- Gabriel Teotônio de Castro Coelho Costa
-- Gabriel Benício Fonseca do Nascimento
+## O que roda em cada plataforma
 
-## Funcionalidades
+| Experimento | Android | iOS | Web (Chrome/Edge, Firefox, Safari*) |
+|---|---|---|---|
+| Notificar agora | Notificação do Android | Notificação do iOS | Notificação real do navegador |
+| Agendar para daqui a 1 minuto | Agendamento nativo `zonedSchedule` | Agendamento nativo `zonedSchedule` | **Timer da aba aberta** + notificação Web |
+| Tocar para abrir `/detalhe` | `payload` + callback/launch details | `payload` + callback/launch details | `payload` + service worker/URL de lançamento do plugin |
+| Repetir diariamente às 08h | Agendamento recorrente nativo | Agendamento recorrente nativo | **Timer diário enquanto a aba permanecer aberta** |
+| Som | Som padrão do canal Android | Som padrão de notificação do iOS | Som do sistema, **mais apito gerado pela página (Web Audio)** quando liberado pelo clique |
 
-| Botão | Demonstra | Método |
-| --- | --- | --- |
-| Notificar agora | Alerta local imediato com som do sistema e vibração compatível | `show()` |
-| Agendar para 1 minuto | Alerta futuro que pode chegar com o app em segundo plano ou fechado | `zonedSchedule()` |
-| Toque abre a tela de detalhes | Navegação por `payload` com app aberto ou iniciado por toque | `getNotificationAppLaunchDetails()` + callback |
-| Repetir todo dia às 08:00 | Agendamento recorrente no fuso do dispositivo | `zonedSchedule(matchDateTimeComponents: DateTimeComponents.time)` |
-| Permitir / Ajustes | Solicitação e recuperação de permissão negada | Android 13+ / iOS |
-| Cancelar agendamentos | Cancela aviso de 1 minuto e aviso diário | `cancel(id: ...)` |
+\* Em navegadores móveis, em especial Safari do iOS, notificações Web exigem condições e restrições adicionais do navegador/sistema (por exemplo, um web app adicionado à tela de início). **A apresentação mais estável no PC é Chrome ou Edge no macOS/Windows/Linux.**
 
-**Não precisa de Firebase, servidor, internet, APNs ou FCM.** Tudo é agendado localmente. O pacote é `flutter_local_notifications` **22.3.3**, fixado para compatibilidade mais ampla com Flutter 3.38.1+ e o Android SDK 36 (a versão 23 exige um setup mais novo).
+**Por que o agendamento na Web é diferente?** Navegadores não possuem uma API padrão para agendar notificações persistentes offline e independentes da aba. A versão Web usa `Timer`; o aviso de 1 minuto funciona **com a aba aberta**, podendo atrasar quando suspensa. Fechar/recarregar a página interrompe o agendamento. Isso é um limite real, e está indicado também na própria interface. Para notificações quando o navegador está fechado, seria necessária outra arquitetura, normalmente Web Push com um servidor e uma inscrição do navegador — **não é notificação local independente de servidor**.
 
-## 1. Pré-requisitos
+A versão mobile agendada é feita pelo sistema operacional e pode funcionar com o app fechado; exatidão e som ainda dependem das autorizações e restrições do dispositivo.
 
-- Flutter **3.38.1+** e Dart compatível (`flutter --version`);
-- Java 17, Android SDK **API 36**, Android Studio/emulador ou celular Android;
-- Para iOS: **macOS + Xcode + CocoaPods** e simulador ou iPhone. Um dispositivo físico é ideal para validar o som;
-- Python 3 disponível como `python3` para aplicar as configurações nativas.
+## Pré-requisitos
 
-Confira o ambiente:
+- Flutter **3.38.1+** e Dart correspondente (`flutter --version` / `flutter doctor -v`).
+- Android: SDK 36, Java 17, Android Studio/emulador ou smartphone.
+- iOS: **Mac com Xcode e CocoaPods**; para iPhone físico é preciso configurar a assinatura do app no Xcode.
+- Web: navegador com suporte a notificações e **localhost ou HTTPS**; não use `file://`.
+- Python 3 (`python3`) para configurar os projetos nativos criados pelo Flutter.
 
-```bash
-flutter doctor -v
-```
+O pacote `flutter_local_notifications: 22.3.3` inclui suporte Web. `flutter_timezone` é chamado apenas em Android/iOS, pois a Web usa o fuso local do próprio browser para o Timer.
 
-> O ZIP contém **todo o código Dart, testes, manifesto Android, ícone e configuração iOS**. O Flutter gera os arquivos padronizados de Gradle/Xcode para a versão instalada no seu computador. O script abaixo faz essa geração e aplica automaticamente as configurações específicas. Não é necessário editar arquivos manualmente.
-
-## 2. Primeira execução (macOS / Linux)
+## Início rápido — Web para apresentação na sala
 
 ```bash
-unzip notificacoes_locais_lddm.zip
+unzip notificacoes_locais_lddm_multiplataforma.zip
 cd notificacoes_locais_lddm
 bash prepare.sh
-flutter analyze
-flutter test
-flutter run
+flutter run -d web-server --web-port 7357
 ```
 
-Se preferir escolher o dispositivo:
+Abra **http://localhost:7357** no Chrome ou Edge normal (não aba privada) do computador. Na primeira vez, clique em **Permitir avisos** e **Permitir** no popup do navegador. Depois clique em **Notificar agora** e, se o navegador e o sistema permitirem, o aviso aparecerá fora da tela do app e você ouvirá um pequeno apito do Web Audio.
+
+**Importante:** para testar *o clique na notificação* use `flutter run -d web-server`, não `flutter run -d chrome`: segundo o README do plugin, o Chrome aberto pelo Flutter em modo de depuração usa uma janela especial que pode impedir que os cliques no aviso sejam entregues ao aplicativo.
+
+Para iniciar a versão Web usando o Chrome diretamente, `flutter run -d chrome` também funciona para testar a **exibição**, mas use o comando acima para a navegação por toque.
+
+**Windows (PowerShell):** descompacte o ZIP, abra a pasta no terminal do VS Code e execute:
+
+```powershell
+.\prepare.ps1
+flutter run -d web-server --web-port 7357
+```
+
+Acesse `http://localhost:7357` no navegador. No Windows, o preparo gera Android + Web; para criar e executar o projeto iOS, use o `prepare.sh` em um Mac.
+
+### Se o navegador não mostrar ou tocar notificações
+
+1. Confirme que a URL é **localhost** ou **HTTPS**, não endereço HTTP remoto.
+2. Clique no ícone de configurações/cadeado ao lado da URL, permita **Notificações** e recarregue a página se solicitado.
+3. Permita sons do site, retire o computador de **Não Perturbe**, verifique o volume e mantenha a aba aberta. O apito só pode tocar após um clique humano no aplicativo.
+4. Se persistir, em Chrome/Edge abra DevTools > Application > Service Workers e confira se há um worker registrado para a origem. Desative bloqueadores que impeçam notificações.
+5. No Firefox/Safari pode haver diferenças. Use Chrome/Edge para a apresentação principal.
+
+O **som da notificação do SO** depende do sistema/navegador; não existe código confiável que consiga sobrepor modo silencioso ou Não Perturbe. O **apito adicional Web** é gerado pelo JavaScript da página apenas enquanto ela estiver aberta e com áudio liberado.
+
+## Android
 
 ```bash
+bash prepare.sh
 flutter devices
-flutter run -d ID_DO_DISPOSITIVO
+flutter run -d ID_DO_ANDROID
 ```
 
-Se `flutter doctor` identificar componentes faltantes, instale primeiro os componentes indicados. Em iOS, se houver erro na instalação dos pods, no macOS, rode `cd ios && pod install && cd ..` após preparar o projeto. No iPhone real, defina seu time de assinatura em `ios/Runner.xcworkspace` no Xcode (Signing & Capabilities).
+Na primeira execução, autorize notificações. No Android 12+/14+, a função de 1 minuto pode pedir acesso especial a **alarmes exatos**. Se negado, o código usa modo **inexato**, que pode atrasar. No Android 13+ a permissão `POST_NOTIFICATIONS` também é necessária. Para confirmar o som, retire o aparelho do silencioso/Não Perturbe, habilite o volume de notificações e confirme o som do canal **Alertas do workshop**. O projeto usa canal ID `alertas_workshop_v2` para evitar reaproveitar configurações antigas de um canal silencioso.
 
-Para executar de novo depois, basta `flutter run`; não é necessário reaplicar o setup em toda execução.
+## iOS
 
-## 3. Roteiro da demonstração (3 testes obrigatórios)
+Em um **Mac**, execute:
 
-1. **Permissões:** abra o aplicativo e toque em **Permitir avisos**. Aceite alertas e sons no Android/iOS. Retire o aparelho do silencioso e de Não Perturbe.
-2. **Imediata:** clique em **Notificar agora**. Observe o alerta e ouça o som do sistema.
-3. **Agendada:** clique em **Agendar para 1 minuto**. Se o Android solicitar permissão especial para alarmes exatos, conceda. Vá para a tela inicial do celular ou feche o app normalmente. Aguarde a notificação, que o sistema deve entregar. Alguns modos de bateria podem atrasá-la.
-4. **Navegação:** clique em **Toque abre a tela de detalhes**. Toque na notificação; será aberta a rota `/detalhe`, exibindo o conteúdo do payload. Teste novamente com o app fechado para demonstrar `getNotificationAppLaunchDetails()`.
-5. **Recorrência:** toque em **Repetir todo dia às 08:00**, confira o contador de pendências e explique `DateTimeComponents.time`. Use **Cancelar agendamentos** ao final para evitar notificações futuras do dispositivo da apresentação.
+```bash
+bash prepare.sh
+flutter devices
+flutter run -d ID_DO_IPHONE_OU_SIMULADOR
+```
 
-### É possível *forçar* a notificação a apitar?
+Em iPhone físico, abra `ios/Runner.xcworkspace` no Xcode e escolha um *Team* para assinar o aplicativo. Solicite permissão de **alertas, badges e som** no próprio app. Teste o som em iPhone físico e com o modo silencioso/Foco desativado. A execução de um app iOS não é possível no Windows ou Linux sem um ambiente Apple de build/assinatura.
 
-O aplicativo solicita o som padrão **ligado** nos detalhes do aviso e no canal Android `alertas_workshop_v1` (importância máxima). O sistema operacional é quem toca o som. **Não é possível garantir áudio** quando o aparelho está no silencioso, em Não Perturbe/foco, com volume de alertas zerado, ou se o usuário silenciou as notificações/canal do app. No iOS, o interruptor de silencioso e o modo Foco influenciam a reprodução. No Android, confirme `Configurações > Apps > Workshop Notificações > Notificações > Alertas do workshop > Som`.
+## Primeiro preparo do projeto
 
-No **Android 8+**, canais são persistentes: alterar `playSound` ou importância no código **não altera o canal que já existe**. Se você testou com som desligado, ajuste o canal manualmente ou reinstale o app. No Android 13+, aceite `POST_NOTIFICATIONS` em tempo de execução.
+O ZIP entrega todos os arquivos de **código, Web, manifesto, ícone, AppDelegate e automação**. As pastas `android/` e `ios/` são estruturas padrão **geradas de acordo com o Flutter instalado** por `flutter create` durante `bash prepare.sh` no macOS/Linux ou `prepare.ps1` no Windows, e recebem as alterações em `scripts/apply_native_overrides.py`. A operação é repetível; depois de executada, as pastas podem ser versionadas no repositório público.
 
-### Precisão do agendamento no Android
+Depois do primeiro preparo:
 
-O Android 12+/14+ pode restringir alarmes exatos: o exemplo declara `SCHEDULE_EXACT_ALARM` e pede permissão quando necessário. Quando não é concedida, o aplicativo faz **fallback para modo inexato**, mostrando uma mensagem de aviso. Economia de bateria e restrições do fabricante também podem atrasar a entrega. Para a demonstração de 1 minuto ser pontual, conceda a permissão especial e desative otimizações agressivas de bateria se necessário.
+```bash
+flutter analyze
+flutter test
+flutter run -d web-server --web-port 7357
+```
 
-Em iOS, o pedido de autorização usa `requestPermissions(alert: true, badge: true, sound: true)`. Os alertas agendados usam um fuso identificado com `flutter_timezone` e a biblioteca `timezone`.
+Para publicar uma build Web compilada:
 
-## 4. Estrutura do projeto
+```bash
+flutter build web --release
+# Hospede a pasta build/web em um endereço HTTPS.
+```
+
+## Roteiro ao vivo para o Workshop (apresentar em 20–25 minutos)
+
+1. **Conceito (3 min):** dispositivo/navegador versus push; explique por que não existe servidor no exemplo.
+2. **Permissões e canais (4 min):** Android 13+, `requestPermissions` do iOS, permissões do site, canal Android com `importance: max` e som.
+3. **Imediata (3 min):** clique **Permitir avisos** e depois **Notificar agora**. No PC, aparece um aviso do sistema com o apito da página.
+4. **Agendada (4 min):** clique **Agendar para 1 minuto** e explique `zonedSchedule` no celular versus `Timer` no Web. Enquanto o tempo passa, mostre o código e a diferença de garantias.
+5. **Payload (4 min):** clique **Toque abre a tela de detalhes** e clique no aviso; mostre a tela de detalhe. Na Web, use navegador normal + web-server.
+6. **Recorrência + limitações (3 min):** mostre a recorrência, fuso horário, economia de bateria e comportamento da Web com a aba fechada.
+7. **Perguntas/GitHub (2–4 min):** mostre a estrutura do repositório e aponte onde cada recurso é implementado.
+
+## Onde está cada implementação
 
 ```text
 notificacoes_locais_lddm/
 ├── lib/
-│   ├── main.dart                      # inicializa o plugin antes do runApp
-│   ├── app.dart                       # navigatorKey e payload do app fechado
-│   ├── models/notification_payload.dart
-│   ├── notifications/notification_service.dart  # permissões, canal e agendamentos
+│   ├── main.dart
+│   ├── app.dart                            # navegação para /detalhe
+│   ├── models/notification_payload.dart   # encode/decode JSON
+│   ├── notifications/
+│   │   ├── notification_service.dart       # lógica Android, iOS e Web
+│   │   └── sound/
+│   │       ├── web_chime_stub.dart         # stub em Android/iOS
+│   │       └── web_chime_web.dart          # integração JS pelo Dart
 │   └── screens/
-│       ├── home_screen.dart           # interface dos 4 experimentos
-│       └── detail_screen.dart         # rota aberta pelo toque
-├── test/                              # testes unitários e widget
+│       ├── home_screen.dart                # testes e limitações por plataforma
+│       └── detail_screen.dart
+├── web/
+│   ├── index.html                         # carrega o Flutter e o apito
+│   ├── notification_chime.js              # Web Audio API
+│   ├── manifest.json
+│   ├── favicon.png
+│   └── icons/
 ├── native_overrides/
-│   ├── android/.../AndroidManifest.xml
-│   ├── android/.../ic_stat_notification.png
+│   ├── android/app/src/main/AndroidManifest.xml
+│   ├── android/app/src/main/res/drawable/ic_stat_notification.png
 │   └── ios/Runner/AppDelegate.swift
-├── scripts/apply_native_overrides.py # configura Android/iOS após flutter create
-├── prepare.sh                        # comando único de instalação
-├── pubspec.yaml
-└── README.md
+├── scripts/apply_native_overrides.py
+├── test/
+├── prepare.sh
+├── prepare.ps1
+└── pubspec.yaml
 ```
 
-O diretório `android/` e o diretório `ios/` são criados pelo Flutter executando `bash prepare.sh`. Depois disso, são diretórios normais do projeto e podem ser **versionados no GitHub**. O script é idempotente: também pode ser reexecutado para reaplicar as opções nativas.
+### Os métodos que podem ser perguntados em sala
 
-## 5. O que cada parte faz
+| Método | Explicação |
+|---|---|
+| `initialize` | Inicializa plugin, callbacks de toque, fuso IANA mobile, canal Android e launch details. |
+| `requestPermission` | Escolhe Web/Android/iOS; não pede permissão Web ao abrir a página. |
+| `showNow` | Dispara notificação imediatamente no ambiente escolhido. |
+| `scheduleInOneMinute` | Em Android/iOS usa `zonedSchedule`; na Web usa `Timer` e `show`. |
+| `scheduleDailyAtEight` | Mobile usa `matchDateTimeComponents: time`; Web usa Timer rearmado após cada disparo. |
+| `showDetailNotification` | Passa JSON com rota `/detalhe` para o clique da notificação. |
+| `getNotificationAppLaunchDetails` | Captura uma notificação que abriu o app/site quando ele não estava em execução. |
+| `prepareUserGesture` | Libera `AudioContext` do navegador, sujeito à política de autoplay. |
+| `cancelPending` | Mobile cancela notificações nativas; Web cancela os Timers em memória. |
 
-- **`initialize`**: configura plugin, fuso IANA e canal Android com importância alta, som e vibração.
-- **`requestPermission`**: diferencia concessão no Android e iOS; oferece caminho para Ajustes se negada.
-- **`showNow`**: cria uma notificação local imediata (ID 1001).
-- **`scheduleInOneMinute`**: calcula `tz.TZDateTime.now(tz.local) + 1 minuto`, usa o AndroidScheduleMode apropriado (ID 2001).
-- **`scheduleDailyAtEight`**: calcula a próxima ocorrência às 08:00 no fuso atual, com repetição diária (ID 2002).
-- **`showDetailNotification`**: mostra aviso com payload JSON com rota `/detalhe` (ID 1002).
-- **`getNotificationAppLaunchDetails`**: identifica o toque que iniciou o aplicativo antes de `runApp`.
-- **`onDidReceiveNotificationResponse`**: recebe o toque quando a aplicação já existe.
-- **`navigatorKey`**: abre `DetailScreen` sem exigir um `BuildContext` da notificação.
+## Publicação no GitHub
 
-## 6. Como publicar no GitHub
-
-Após executar `bash prepare.sh` e validar o funcionamento:
+Depois de `bash prepare.sh`, `flutter analyze`, `flutter test` e o teste manual no navegador e celular:
 
 ```bash
 git init
 git add .
-git commit -m "feat: workshop Flutter notificacoes locais Android iOS"
+git commit -m "feat: workshop notificacoes locais Android iOS Web"
 git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
 git push -u origin main
 ```
 
-Crie previamente o repositório vazio no GitHub. **Atualize o último slide** com a URL real do projeto, conforme o enunciado da disciplina.
+Substitua o URL e adicione o endereço real do repositório ao **slide final** antes de apresentar: o enunciado do professor o exige.
 
-## 7. Referências técnicas
+## Fontes técnicas para o relatório/oratória
 
-- https://pub.dev/packages/flutter_local_notifications/versions/22.3.3
-- https://pub.dev/packages/flutter_timezone
-- https://pub.dev/packages/timezone
-- https://developer.android.com/develop/ui/views/notifications/notification-permission
-- https://developer.android.com/develop/background-work/services/alarms/schedule
-- https://developer.apple.com/documentation/usernotifications
+- Plugin Flutter (versão utilizada): https://pub.dev/packages/flutter_local_notifications/versions/22.3.3
+- Implementação Flutter Web: https://pub.dev/packages/flutter_local_notifications_web
+- Limitações e permissões da Notifications API: https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API/Using_the_Notifications_API
+- Web Audio API: https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
 
-## Limitações honestas
+## Validação
 
-O código e o setup foram verificados estaticamente. **O ambiente usado para montar este ZIP não contém Flutter, Android SDK ou Xcode**, portanto a compilação/execução em um dispositivo físico precisa ser feita no seu computador com os comandos acima. Notificações agendadas não ficam garantidas se o usuário revogar permissões, reiniciar sem as condições de restauração, fizer *force stop* do aplicativo no Android, ou se o sistema restringir a entrega.
+Este pacote foi verificado quanto à organização dos arquivos, estrutura Web, sintaxe JavaScript, JSON, XML, automação Python e formato ZIP. **Não foi possível compilar Flutter neste ambiente** (SDK Flutter/Dart não disponíveis). A garantia de funcionamento depende da execução de `flutter analyze`, `flutter test` e testes reais em Android/iOS/Chrome conforme descrito acima. A implementação não contorna permissões nem silencia as limitações do navegador.

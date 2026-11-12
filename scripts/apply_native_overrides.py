@@ -110,57 +110,60 @@ def edit_wrapper():
 def main():
     android_app = ROOT / 'android/app'
     ios_runner = ROOT / 'ios/Runner'
-    if not android_app.is_dir() or not ios_runner.is_dir():
-        raise RuntimeError('Rode primeiro flutter create --platforms=android,ios .')
-
-    gradle = android_app / 'build.gradle.kts'
-    if not gradle.exists():
-        gradle = android_app / 'build.gradle'
-    if not gradle.exists():
-        raise RuntimeError('Não foi encontrado build.gradle(.kts).')
-    settings = ROOT / 'android/settings.gradle.kts'
-    if not settings.exists():
-        settings = ROOT / 'android/settings.gradle'
-
-    edit_android_app_gradle(gradle)
-    edit_settings_gradle(settings)
-    edit_wrapper()
-
     overrides = ROOT / 'native_overrides'
-    shutil.copy2(overrides / 'android/app/src/main/AndroidManifest.xml',
-                 android_app / 'src/main/AndroidManifest.xml')
-    drawable = android_app / 'src/main/res/drawable'
-    drawable.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(overrides / 'android/app/src/main/res/drawable/ic_stat_notification.png',
-                 drawable / 'ic_stat_notification.png')
-    shutil.copy2(overrides / 'ios/Runner/AppDelegate.swift',
-                 ios_runner / 'AppDelegate.swift')
+    configured = []
 
-    plist_path = ios_runner / 'Info.plist'
-    with plist_path.open('rb') as f:
-        plist = plistlib.load(f)
-    plist['CFBundleDisplayName'] = 'Workshop Notificações'
-    plist['CFBundleName'] = 'NotificacoesLDDM'
-    with plist_path.open('wb') as f:
-        plistlib.dump(plist, f, sort_keys=False)
+    if android_app.is_dir():
+        gradle = android_app / 'build.gradle.kts'
+        if not gradle.exists():
+            gradle = android_app / 'build.gradle'
+        if not gradle.exists():
+            raise RuntimeError('Não foi encontrado build.gradle(.kts) do Android.')
+        settings = ROOT / 'android/settings.gradle.kts'
+        if not settings.exists():
+            settings = ROOT / 'android/settings.gradle'
+        edit_android_app_gradle(gradle)
+        edit_settings_gradle(settings)
+        edit_wrapper()
+        shutil.copy2(overrides / 'android/app/src/main/AndroidManifest.xml',
+                     android_app / 'src/main/AndroidManifest.xml')
+        drawable = android_app / 'src/main/res/drawable'
+        drawable.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            overrides / 'android/app/src/main/res/drawable/ic_stat_notification.png',
+            drawable / 'ic_stat_notification.png')
+        configured.append('Android')
 
-    pbxproj = ROOT / 'ios/Runner.xcodeproj/project.pbxproj'
-    pbx_text = pbxproj.read_text()
-    pbx_text = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET\s*=\s*[0-9.]+;',
-                      'IPHONEOS_DEPLOYMENT_TARGET = 13.0;', pbx_text)
-    pbxproj.write_text(pbx_text)
-    podfile = ROOT / 'ios/Podfile'
-    if podfile.exists():
-        pod_text = podfile.read_text()
-        if re.search(r'^\s*#?\s*platform :ios,', pod_text, re.MULTILINE):
-            pod_text = re.sub(r'^\s*#?\s*platform :ios, [^\n]+',
-                              "platform :ios, '13.0'", pod_text,
-                              count=1, flags=re.MULTILINE)
-        else:
-            pod_text = "platform :ios, '13.0'\n" + pod_text
-        podfile.write_text(pod_text)
-    print('Configurações nativas aplicadas: Android (som/canal/permissões/desugaring) e iOS.')
-    print('Confira agora flutter doctor, flutter pub get, flutter analyze, flutter test, flutter run.')
+    if ios_runner.is_dir():
+        shutil.copy2(overrides / 'ios/Runner/AppDelegate.swift',
+                     ios_runner / 'AppDelegate.swift')
+        plist_path = ios_runner / 'Info.plist'
+        with plist_path.open('rb') as f:
+            plist = plistlib.load(f)
+        plist['CFBundleDisplayName'] = 'Workshop Notificações'
+        plist['CFBundleName'] = 'NotificacoesLDDM'
+        with plist_path.open('wb') as f:
+            plistlib.dump(plist, f, sort_keys=False)
+        pbxproj = ROOT / 'ios/Runner.xcodeproj/project.pbxproj'
+        pbx_text = pbxproj.read_text()
+        pbx_text = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET\s*=\s*[0-9.]+;',
+                          'IPHONEOS_DEPLOYMENT_TARGET = 13.0;', pbx_text)
+        pbxproj.write_text(pbx_text)
+        podfile = ROOT / 'ios/Podfile'
+        if podfile.exists():
+            pod_text = podfile.read_text()
+            if re.search(r'^\s*#?\s*platform :ios,', pod_text, re.MULTILINE):
+                pod_text = re.sub(r'^\s*#?\s*platform :ios, [^\n]+',
+                                  "platform :ios, '13.0'", pod_text,
+                                  count=1, flags=re.MULTILINE)
+            else:
+                pod_text = "platform :ios, '13.0'\n" + pod_text
+            podfile.write_text(pod_text)
+        configured.append('iOS')
+
+    print('Configurações aplicadas: ' +
+          (', '.join(configured) if configured else 'somente Web (sem ajustes nativos)'))
+    print('Próximo passo: flutter pub get && flutter analyze && flutter test.')
 
 
 if __name__ == '__main__':
